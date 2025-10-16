@@ -1,0 +1,88 @@
+import requests
+import sys
+import os
+import urllib3
+
+# ============ CONFIGURATION =============
+
+API_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJJV2ZXcE1nNGF2bk5GVUU5MU44djFhWmZOVlhPTFlVaWFxOEkyMk83b1FBIiwiaWF0IjoxNzU3NDEzMDY2fQ.V0p7JGXmQJgxQcVdUcUxow9c-NRVuPtTYNvkrH_4PGM"  # Replace with your API token
+CKAN_URL = "https://localhost:8443"
+OWNER_ORG = "deutsches-archaologisches-institut"  
+DATASET_NAME = f"my-new-dataset-{os.getpid()}"
+DATASET_TITLE = "Archivematica Dataset"
+FILE_PATH = "/home/wperera/Dokumente/CKAN - Datasets for upload/Archivematica-processed-data.7z"
+RESOURCE_NAME = "Archivematica Data"
+
+# ============ FUNCTIONS =============
+
+def create_dataset():
+    url = f"{CKAN_URL}/api/3/action/package_create"
+    headers = {
+        "Authorization": API_TOKEN,
+        "Content-Type": "application/json"
+    }
+    data = {
+        "name": DATASET_NAME,
+        "title": DATASET_TITLE,
+        "private": False,
+        "owner_org": OWNER_ORG,
+    }
+    print(f"Creating dataset '{DATASET_NAME}' owned by '{OWNER_ORG}'...")
+    response = requests.post(url, headers=headers, json=data, verify=False)
+    if response.status_code != 200:
+        print(f"Error creating dataset: HTTP {response.status_code}")
+        print(response.text)
+        sys.exit(1)
+    result = response.json()
+    if not result.get("success"):
+        print("Failed to create dataset:", result.get("error"))
+        sys.exit(1)
+    dataset_id = result["result"]["id"]
+    print(f"Dataset created with ID: {dataset_id}")
+    return dataset_id
+
+def upload_resource(dataset_id):
+    url = f"{CKAN_URL}/api/3/action/resource_create"
+    headers = {
+        "Authorization": API_TOKEN,
+    }
+    print(f"Uploading resource '{RESOURCE_NAME}' to dataset ID '{dataset_id}' ...")
+
+    # Open file safely using 'with' statement
+    with open(FILE_PATH, "rb") as file_data:
+        files = {
+            "upload": (os.path.basename(FILE_PATH), file_data),
+        }
+        data = {
+            "package_id": dataset_id,
+            "name": RESOURCE_NAME,
+        }
+        response = requests.post(url, headers=headers, data=data, files=files, verify=False)
+
+    if response.status_code != 200:
+        print(f"Error uploading resource: HTTP {response.status_code}")
+        print(response.text)
+        sys.exit(1)
+    result = response.json()
+    if not result.get("success"):
+        print("Failed to upload resource:", result.get("error"))
+        sys.exit(1)
+    resource_url = result["result"]["url"]
+    print(f"Resource uploaded successfully: {resource_url}")
+    return resource_url
+
+def main():
+    dataset_id = create_dataset()
+    resource_url = upload_resource(dataset_id)
+    print(f"\nDataset URL: {CKAN_URL}/dataset/{DATASET_NAME}")
+    print(f"Resource URL: {resource_url}")
+
+if __name__ == "__main__":
+    # Disable SSL warnings (use only if you understand the risks)
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+    if not os.path.isfile(FILE_PATH):
+        print(f"File not found: {FILE_PATH}")
+        sys.exit(1)
+
+    main()
